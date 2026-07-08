@@ -1,9 +1,8 @@
-// apps/frontend/src/app/escalations/[id]/page.tsx
 'use client';
 
 import { useEffect, useState, use } from 'react';
-import { fetchEscalationById, approveAction, rejectAction } from '../../../lib/api';
-import { AgentAction } from '../../../types';
+import { fetchEscalationById, approveAction, rejectAction, fetchAuditLogs } from '../../../lib/api';
+import { AgentAction, AuditLog } from '../../../types';
 import Link from 'next/link';
 
 interface PageProps {
@@ -13,6 +12,7 @@ interface PageProps {
 export default function EscalationReviewPage({ params }: PageProps) {
   const { id } = use(params);
   const [action, setAction] = useState<AgentAction | null>(null);
+  const [logs, setLogs] = useState<AuditLog[]>([]); // 👈 Track audit history data stream
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,18 +22,25 @@ export default function EscalationReviewPage({ params }: PageProps) {
   const REVIEWER_ID = 'b18274cf-e421-432a-bc91-ff183490192d';
 
   useEffect(() => {
-    async function loadActionContext() {
-      try {
-        const data = await fetchEscalationById(id);
-        setAction(data);
-      } catch (err: any) {
-        setError(err.message || 'Failed to retrieve details.');
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadActionContext();
-  }, [id]);
+		async function loadActionContext() {
+		  try {
+		    // 1. Fetch the escalation action details first
+		    const actionData = await fetchEscalationById(id);
+		    setAction(actionData);
+
+		    // 2. Safely grab the support request ID to fetch its audit trail
+		    if (actionData?.support_request_id) {
+		      const logsData = await fetchAuditLogs(actionData.support_request_id);
+		      setLogs(logsData);
+		    }
+		  } catch (err: any) {
+		    setError(err.message || 'Failed to retrieve details.');
+		  } finally {
+		    setLoading(false);
+		  }
+		}
+		loadActionContext();
+	}, [id]);
 
   const handleApproval = async () => {
     if (!action) return;
@@ -43,10 +50,12 @@ export default function EscalationReviewPage({ params }: PageProps) {
     try {
       await approveAction(action.id, REVIEWER_ID);
       setSuccessMessage('Action authorized successfully. System state synchronized.');
-      setAction((prev) => prev ? { ...prev, status: 'approved' } : null);
+      setAction((prev) => (prev ? { ...prev, status: 'approved' } : null));
+      
+      // Refresh timeline records cleanly following an application mutation
+      const updatedLogs = await fetchAuditLogs(id);
+      setLogs(updatedLogs);
     } catch (err: any) {
-      // HONEST CONCURRENT STATE TRIGGER: 
-      // Catches state or version mismatch from NestJS backend if already updated
       setError(`Concurrent Execution Blocked: ${err.message}`);
     } finally {
       setSubmitting(false);
@@ -61,7 +70,10 @@ export default function EscalationReviewPage({ params }: PageProps) {
     try {
       await rejectAction(action.id, REVIEWER_ID);
       setSuccessMessage('Action rejected. Escalation token moved to cold status.');
-      setAction((prev) => prev ? { ...prev, status: 'rejected' } : null);
+      setAction((prev) => (prev ? { ...prev, status: 'rejected' } : null));
+      
+      const updatedLogs = await fetchAuditLogs(id);
+      setLogs(updatedLogs);
     } catch (err: any) {
       setError(err.message || 'Failed to submit rejection.');
     } finally {
@@ -69,12 +81,12 @@ export default function EscalationReviewPage({ params }: PageProps) {
     }
   };
 
-  if (loading) return <div className="text-xs font-mono text-slate-500">Retrieving trace relational data...</div>;
-  if (!action && error) return <div className="p-4 bg-rose-950 text-rose-200 text-xs font-mono border border-rose-800 rounded">⚠️ Fatal: {error}</div>;
-  if (!action) return <div className="text-xs font-mono text-slate-500">Action node missing.</div>;
+  if (loading) return <div className="text-xs font-mono text-slate-500 p-6">Retrieving trace relational data...</div>;
+  if (!action && error) return <div className="m-6 p-4 bg-rose-950 text-rose-200 text-xs font-mono border border-rose-800 rounded">⚠️ Fatal: {error}</div>;
+  if (!action) return <div className="text-xs font-mono text-slate-500 p-6">Action node missing.</div>;
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-6 max-w-4xl mx-auto p-4 md:p-6">
       {/* Upper Navigation Anchor */}
       <div>
         <Link href="/queue" className="text-xs font-mono text-slate-400 hover:text-emerald-400 transition">
@@ -120,17 +132,70 @@ export default function EscalationReviewPage({ params }: PageProps) {
               {action.agent_reasoning}
             </div>
           </div>
+
+          {/* 👇 Section: Live Audit History Timeline (NEW) */}
+          <div className="bg-slate-950 border border-slate-800 rounded-lg p-4 font-mono">
+            <h3 className="text-xs font-bold uppercase text-slate-400 border-b border-slate-800 pb-2 mb-4">
+              3. System Action Audit Trail
+            </h3>
+            {logs.length === 0 ? (
+              <p className="text-xs text-slate-500 italic">No historical traces registered against this target.</p>
+            ) : (
+              <div className="flow-root pl-2">
+                <ul className="-mb-8">
+                  {logs.map((log, logIdx) => (
+                    <li key={log.id}>
+                      <div className="relative pb-8">
+                        {logIdx !== logs.length - 1 && (
+                          <span className="absolute top-4 left-4 -ml-px h-full w-0.5 bg-slate-800" aria-hidden="true" />
+                        )}
+                        <div className="relative flex space-x-3 items-start">
+                          <div>
+                            <span className={`h-8 w-8 rounded-full flex items-center justify-center ring-8 ring-slate-950 text-xs ${
+                              log.actor_type === 'agent' 
+                                ? 'bg-indigo-500/20 text-indigo-400' 
+                                : log.actor_type === 'human'
+                                ? 'bg-emerald-500/20 text-emerald-400'
+                                : 'bg-slate-500/20 text-slate-400'
+                            }`}>
+                              {log.actor_type === 'agent' ? '🤖' : log.actor_type === 'human' ? '👤' : '⚙️'}
+                            </span>
+                          </div>
+                          <div className="flex-1 min-w-0 pt-1.5 flex justify-between space-x-4">
+                            <div>
+                              <p className="text-xs text-slate-300 font-bold">
+                                {log.action}{' '}
+                                <span className="text-[10px] text-slate-500 font-normal capitalize">via {log.actor_type}</span>
+                              </p>
+                              {log.metadata && Object.keys(log.metadata).length > 0 && (
+                                <p className="text-[11px] text-slate-400 mt-1 bg-slate-900/60 p-2 rounded border border-slate-800/80 font-mono break-all max-h-32 overflow-y-auto">
+                                  {JSON.stringify(log.metadata)}
+                                </p>
+                              )}
+                            </div>
+                            <div className="text-right text-[10px] text-slate-500 whitespace-nowrap self-start">
+                              {new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Column 3: The Action Execution Dock */}
         <div className="space-y-6">
           <div className="bg-slate-950 border border-emerald-800/40 rounded-lg p-4 font-mono space-y-4">
             <h3 className="text-xs font-bold uppercase text-emerald-400 border-b border-slate-800 pb-2">
-              3. Guarded Mutation Dock
+              4. Guarded Mutation Dock
             </h3>
 
             {/* Target Specs Meta Row */}
-            <div className="space-y-2 text-xs">
+            <div className="space-y-3 text-xs">
               <div>
                 <span className="text-slate-500 block uppercase text-[10px]">Target Identifier</span>
                 <span className="font-bold text-slate-200 text-sm">{action.proposed_data.orderId}</span>
@@ -149,8 +214,8 @@ export default function EscalationReviewPage({ params }: PageProps) {
               )}
               <div>
                 <span className="text-slate-500 block uppercase text-[10px]">Token Live Status</span>
-                <span className={`font-bold ${action.status === 'proposed' ? 'text-amber-500 animate-pulse' : action.status === 'approved' ? 'text-emerald-400' : 'text-slate-500'}`}>
-                  ● {action.status.toUpperCase()}
+                <span className={`font-bold ${action.status === 'proposed' ? 'text-amber-500 animate-pulse' : action.status === 'approved' || action.status === 'executed' ? 'text-emerald-400' : 'text-slate-500'}`}>
+                  ● {(action.status === 'approved' ? 'executed' : action.status).toUpperCase()}
                 </span>
               </div>
             </div>

@@ -1,5 +1,5 @@
 // apps/frontend/src/lib/api.ts
-import { AgentAction } from '../types';
+import { AgentAction, OrderEntity, AuditLog} from '../types';
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
@@ -42,4 +42,24 @@ export async function rejectAction(actionId: string, reviewerId: string): Promis
   if (!res.ok) {
     throw new Error('Failed to reject action item state.');
   }
+}
+
+export async function fetchAuditLogs(escalationId: string): Promise<AuditLog[]> {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/escalations/${escalationId}/logs`, {
+    cache: 'no-store',
+  });
+  if (!res.ok) throw new Error('Failed to retrieve audit log trail.');
+  return res.json();
+}
+
+export async function fetchAllOrders(): Promise<OrderEntity[]> {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/orders`, {
+    cache: 'no-store', // Always get fresh financial metrics
+  });
+  
+  if (!res.ok) {
+    throw new Error('Failed to retrieve system order telemetry.');
+  }
+  
+  return res.json() as Promise<OrderEntity[]>;
 }

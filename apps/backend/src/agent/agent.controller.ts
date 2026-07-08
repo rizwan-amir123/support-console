@@ -59,6 +59,19 @@ export class AgentController {
     if (error || !data) throw new BadRequestException('Escalation record not found');
     return data;
   }
+  
+	@Get('escalations/:id/logs')
+  async getEscalationLogs(@Param('id') id: string) {
+  	console.log('id;', id)
+    const { data, error } = await this.supabase
+      .from('audit_logs')
+      .select('id, actor_type, actor_id, action, target_type, target_id, metadata, created_at')
+      .eq('target_id', id) 
+      .order('created_at', { ascending: true }); // Keeps logs in sequential order
+
+    if (error) throw new BadRequestException(error.message);
+    return data;
+  }
 
   @Patch('escalations/:id/approve')
   async approveAction(
@@ -79,7 +92,7 @@ export class AgentController {
       throw new BadRequestException('Honest Concurrent Block: Action processed already by another supervisor.');
     }
 
-    const { orderId, amount } = action.proposed_data; // This orderId is a string like "ORD-1043"
+    const { orderId, amount } = action.proposed_data; 
 
     // 2. Extract current targeted entity state using order_number instead of UUID id
     const { data: order, error: orderErr } = await this.supabase
@@ -105,8 +118,8 @@ export class AgentController {
           is_fully_refunded: targetRefundTotal === Number(order.total_amount),
           version: order.version + 1
         })
-        .eq('id', order.id) // 👈 FIXED: Using the actual UUID retrieved from the step 2 selection query
-        .eq('version', order.version) // Match target state row version!
+        .eq('id', order.id) 
+        .eq('version', order.version) 
         .select();
 
       if (updateErr || !updatedOrder || updatedOrder.length === 0) {
@@ -120,7 +133,7 @@ export class AgentController {
       const { data: updatedOrder, error: updateErr } = await this.supabase
         .from('orders')
         .update({ status: 'cancelled', version: order.version + 1 })
-        .eq('id', order.id) // 👈 FIXED: Using the actual UUID 
+        .eq('id', order.id) 
         .eq('version', order.version)
         .select();
 
@@ -160,5 +173,32 @@ export class AgentController {
     }
 
     return { success: true, message: "Escalation action dismissed cleanly." };
+  }
+  
+  @Get('orders')
+  async getAllOrders() {
+    // Retrieves your full order list to supply the frontend overview grid
+    const { data, error } = await this.supabase
+      .from('orders')
+      .select(`
+        id, 
+        order_number, 
+        customer_id, 
+        status, 
+        total_amount, 
+        currency, 
+        created_at, 
+        updated_at, 
+        version, 
+        refunded_amount, 
+        is_fully_refunded
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw new BadRequestException(`Database Retrieval Failure: ${error.message}`);
+    }
+    
+    return data;
   }
 }

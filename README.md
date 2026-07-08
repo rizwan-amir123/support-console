@@ -1,159 +1,202 @@
-# Turborepo starter
 
-This Turborepo starter is maintained by the Turborepo core team.
+# Support Dashboard Console & Autonomous Agent Pipeline
 
-## Using this example
+An enterprise e-commerce support architecture running an automated customer service agent framework tied directly into a human-in-the-loop escalation dashboard. Built as a high-performance monorepo managed by turborepo.
 
-Run the following command:
+## Live links
+https://support-console-backend.vercel.app/
 
-```sh
-npx create-turbo@latest
+https://support-console-frontend.vercel.app/
+
+## 🏗️ Project Stack
+Frontend - Next.js
+
+Backend - Nest.js
+
+Postgres over Supabase
+
+
+
+## 🏗️ Project Architecture
+
+```text
+support-console/
+├── apps/
+│   ├── backend/       # NestJS/Node.js Customer Service Agent API Pipeline
+│   └── frontend/      # Next.js Escalation Management Dashboard Panel
+├── packages/
+│   ├── eslint-config/ # Global workspace code styling configs
+│   └── typescript-config/ # Shared enterprise TypeScript configurations
+├── turbo.json         # Turborepo pipeline topology and build cache mapping
+└── package.json       # Monorepo workspaces definition
+
 ```
 
-## What's inside?
+---
 
-This Turborepo includes the following packages/apps:
+## 🛠️ Local Development Setup
 
-### Apps and Packages
+### 1. Installation
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+Install all dependencies across all workspace projects simultaneously from the root directory:
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
+```bash
+npm install
 
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo build
 ```
 
-Without global `turbo`, use your package manager:
+### 2. Database & Data Seeding
 
-```sh
-cd my-turborepo
-npx turbo build
-npm dlx turbo build
-npm exec turbo build
+To initialize your mock database records and run baseline behavioral tests, execute the backend seeding command:
+
+```bash
+npx tsx apps/backend/seed.ts
+
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+### 3. Environment Variables
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+Placed in .env in support-console/apps/backend:
 
-```sh
-turbo build --filter=docs
+```bash
+# Supabase
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
+
+# Groq
+GROQ_API_KEY=
+
+# Optional
+PORT=3001
+
+```
+Placed in .env in support-console/apps/frontend:
+
+```bash
+NEXT_PUBLIC_API_URL=
+
 ```
 
-Without global `turbo`:
+### 4. Run Development Servers
 
-```sh
-npx turbo build --filter=docs
-npm exec turbo build --filter=docs
-npm exec turbo build --filter=docs
+Run backend server from folder support-console/apps/backend:
+
+```bash
+npm run start:dev
+
 ```
 
-### Develop
+Run frontend server from folder support-console/apps/frontend:
 
-To develop all apps and packages, run the following command:
+```bash
+npx next dev -p 3000
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo dev
 ```
 
-Without global `turbo`, use your package manager:
+* Frontend Console: `http://localhost:3000`
+* Backend Agent Server: `http://localhost:3001`
 
-```sh
-cd my-turborepo
-npx turbo dev
-npm exec turbo dev
-npm exec turbo dev
+---
+
+### 5. Schemas for Database
+
+The SQL query used to initiate tables in placed in initial.sql file inside support-console/apps/backend
+
+
+## 🧪 Simulation Matrix Testing
+
+The agent pipeline features custom fallback validation logic and mathematical business guardrails. You can test execution routes directly via `curl` requests while your backend development server is running locally. 
+
+Before running any test case, reset your local database state to baseline:
+```bash
+npx tsx apps/backend/seed.ts
+
+```
+Use the url http://localhost:3001/api if testing locally. 
+
+#### 🧪 Test 1: Standard Refund Request
+
+* **Target:** `ORD-101` (Delivered, $150 total, $0 refunded)
+* **Expected Flow:** Proposes a $50 refund and pushes an escalation entry smoothly to `/queue`.
+
+```bash
+curl -X POST https://support-console-backend.vercel.app/api/agent/process \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Please refund me for order ORD-101, it came cracked into pieces.",
+    "orderId": "ORD-101"
+  }'
+
 ```
 
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+#### 🧪 Test 2: Over-Amount Protection Check
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+* **Target:** `ORD-102` (Delivered, $40 total value)
+* **Expected Flow:** Customer requests $300. The agent catches the hard cap constraint ($40 max available pool) and dynamically clamps/auto-corrects the proposal entry down to $40 instead.
 
-```sh
-turbo dev --filter=web
+```bash
+curl -X POST https://support-console-backend.vercel.app/api/agent/process \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "I want a $300 refund for order ORD-102 because customer service took too long.",
+    "orderId": "ORD-102"
+  }'
+
 ```
 
-Without global `turbo`:
+#### 🧪 Test 3: Double Refund Protection (Cap Lock Check)
 
-```sh
-npx turbo dev --filter=web
-npm exec turbo dev --filter=web
-npm exec turbo dev --filter=web
+* **Target:** `ORD-105` (Delivered, $100 total, already fully refunded $100, `is_fully_refunded: true` `🔒`)
+* **Expected Flow:** The validation layer catches the absolute cap lock state. `calculateRefundAmount` evaluates to $0 available, throws a block error, and refuses to duplicate an escalation proposal to your dashboard.
+
+```bash
+curl -X POST https://support-console-backend.vercel.app/api/agent/process \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Hey, I never got my money back for order ORD-105. Can I get a refund?",
+    "orderId": "ORD-105"
+  }'
+
 ```
 
-### Remote Caching
+#### 🧪 Test 4: In-Transit Logistics Block
 
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
+* **Target:** `ORD-104` (Status: `shipped`)
+* **Expected Flow:** Customer wants a cancellation. The logistics check catches that `shipped` packages cannot be cancelled. The agent handles the intercept gracefully, informs the user it has already left the warehouse, and shifts focus to offer a post-delivery return/refund mechanism instead.
 
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
+```bash
+curl -X POST https://support-console-backend.vercel.app/api/agent/process \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "I changed my mind, please cancel my order ORD-104 immediately.",
+    "orderId": "ORD-104"
+  }'
 
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo login
 ```
 
-Without global `turbo`, use your package manager:
+#### 🧪 Test 5: Clean Order Cancellation (Unshipped)
 
-```sh
-cd my-turborepo
-npx turbo login
-npm exec turbo login
-npm exec turbo login
+* **Target:** `ORD-103` (Status: `processing`)
+* **Expected Flow:** The order hasn't left the facility yet. The system passes the check and generates a clean cancellation proposal escalation trace directly.
+
+```bash
+curl -X POST https://support-console-backend.vercel.app/api/agent/process \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Please cancel my order ORD-103 immediately. I ordered the wrong size items.",
+    "orderId": "ORD-103"
+  }'
+
 ```
 
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
+---
 
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
+### 🖥️ End-to-End Validation Check
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+After hitting all 5 endpoints, your new frontend features will reflect the results beautifully:
 
-```sh
-turbo link
+1. Your **`/orders`** page ledger will show the baseline constraints unchanged.
+2. Your **`/queue`** page will display exactly 3 valid proposed escalations (Case 1, Case 2, and Case 5) waiting for supervisors.
+3. Selecting any entry will load the exact chronological timeline inside your updated **System Action Audit Trail** component!
+
 ```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-npm exec turbo link
-npm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)

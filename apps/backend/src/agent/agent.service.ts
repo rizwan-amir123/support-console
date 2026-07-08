@@ -61,7 +61,7 @@ Always explain your reasoning inside your responses.`
         }
       }));
 
-      // FIX 1 & 2: Route through the injected groqService wrapper properties correctly
+      // Route through the injected groqService wrapper properties correctly
       const completion = await this.groqService.client.chat.completions.create({
         model: this.groqService.model,
         messages,
@@ -92,7 +92,7 @@ Always explain your reasoning inside your responses.`
           .update({ status: updatedStatus, order_id: providedOrderId || null })
           .eq('id', ticket.id);
 
-        // 2. FIXED: INSERT a fresh row into agent_actions if it needs human review
+        // 2. INSERT a fresh row into agent_actions if it needs human review
         if (updatedStatus === 'escalated') {
           await this.supabase
             .from('agent_actions')
@@ -103,7 +103,7 @@ Always explain your reasoning inside your responses.`
               agent_reasoning: contentStr,
               proposed_data: {
                 orderId: providedOrderId || "UNKNOWN",
-                amount: 150.00 // You can parse this or keep a placeholder variable
+                amount: 150.00 
               },
               tool_calls: executedToolHistory 
             });

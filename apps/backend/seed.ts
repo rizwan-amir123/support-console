@@ -1,4 +1,3 @@
-// apps/backend/seed.ts
 import * as dotenv from 'dotenv';
 import { resolve } from 'path';
 import { createClient } from '@supabase/supabase-js';
@@ -23,35 +22,58 @@ async function seedDatabase() {
   await supabase.from('support_requests').delete().neq('id', '00000000-0000-0000-0000-000000000000');
   await supabase.from('orders').delete().neq('id', '00000000-0000-0000-0000-000000000000');
 
-  console.log("📦 Seeding test orders...");
+  console.log("📦 Seeding 5 test scenario orders...");
 
   const mockCustomerId = crypto.randomUUID();
 
   const testOrders = [
     {
-      order_number: "ORD-1043",
+      // Case 1: Standard Valid Partial Refund (Has available financial room)
+      order_number: "ORD-101",
       customer_id: mockCustomerId,
-      status: "processing",
+      status: "delivered",
       total_amount: 150.00,
       refunded_amount: 0.00,
       is_fully_refunded: false,
       version: 1
     },
     {
-      order_number: "ORD-9999",
+      // Case 2: Guardrail Exception - Over-Refund Limit (Order total is smaller than mutation request)
+      order_number: "ORD-102",
       customer_id: mockCustomerId,
-      status: "shipped", // Guardrail test: should refuse manual cancellation
-      total_amount: 85.50,
+      status: "delivered",
+      total_amount: 40.00,
       refunded_amount: 0.00,
       is_fully_refunded: false,
       version: 1
     },
     {
-      order_number: "ORD-5555",
+      // Case 3: Standard Valid Cancellation (Status is eligible for pre-shipment termination)
+      order_number: "ORD-103",
       customer_id: mockCustomerId,
-      status: "delivered", // Guardrail test: already fully refunded
+      status: "processing",
       total_amount: 200.00,
-      refunded_amount: 200.00,
+      refunded_amount: 0.00,
+      is_fully_refunded: false,
+      version: 1
+    },
+    {
+      // Case 4: Guardrail Exception - Bad Cancellation State (Already left warehouse)
+      order_number: "ORD-104",
+      customer_id: mockCustomerId,
+      status: "shipped",
+      total_amount: 85.00,
+      refunded_amount: 0.00,
+      is_fully_refunded: false,
+      version: 1
+    },
+    {
+      // Case 5: Cap Lock Breach Verification (Already fully maxed out, locked)
+      order_number: "ORD-105",
+      customer_id: mockCustomerId,
+      status: "delivered",
+      total_amount: 100.00,
+      refunded_amount: 100.00,
       is_fully_refunded: true,
       version: 1
     }
@@ -67,10 +89,10 @@ async function seedDatabase() {
     return;
   }
 
-  console.log(`✅ Successfully seeded ${insertedOrders.length} base orders!`);
+  console.log(`\n✅ Successfully seeded ${insertedOrders.length} production scenario orders!`);
   console.log("-------------------------------------------------------");
   insertedOrders.forEach(o => {
-    console.log(`Order Number: ${o.order_number} -> ID: ${o.id} (${o.status})`);
+    console.log(`Order Number: ${o.order_number} -> ID: ${o.id} (${o.status}) [Cap Lock: ${o.is_fully_refunded ? '🔒' : '🔓'}]`);
   });
 }
 

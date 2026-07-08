@@ -1,5 +1,5 @@
 // apps/frontend/src/app/layout.tsx
-import './globals.css'; // Assume basic Tailwind setup
+import './globals.css'; 
 
 export const metadata = {
   title: 'Support Operations Console',
@@ -20,6 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </div>
             <nav className="flex gap-4 text-xs font-medium text-slate-400">
               <a href="/queue" className="hover:text-slate-100 transition">Queue</a>
+              <a href="/orders" className="hover:text-slate-100 transition">Orders</a>
             </nav>
           </div>
         </header>
