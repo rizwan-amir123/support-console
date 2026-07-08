@@ -212,10 +212,10 @@ export default function EscalationReviewPage({ params }: PageProps) {
                   <span className="font-bold text-amber-400 text-lg">${Number(action.proposed_data.amount).toFixed(2)}</span>
                 </div>
               )}
-              <div>
+							<div>
                 <span className="text-slate-500 block uppercase text-[10px]">Token Live Status</span>
-                <span className={`font-bold ${action.status === 'proposed' ? 'text-amber-500 animate-pulse' : action.status === 'approved' || action.status === 'executed' ? 'text-emerald-400' : 'text-slate-500'}`}>
-                  ● {(action.status === 'approved' ? 'executed' : action.status).toUpperCase()}
+                <span className={`font-bold ${action.status === 'proposed' ? 'text-amber-500 animate-pulse' : action.status === 'approved' ? 'text-emerald-400' : 'text-slate-500'}`}>
+                  ● {action.status.toUpperCase()}
                 </span>
               </div>
             </div>
