@@ -57,7 +57,7 @@ Always explain your reasoning inside your responses.`
         function: {
           name: tool.name,
           description: tool.description,
-          parameters: tool.parameters ? zodToJsonSchema(tool.parameters) : { type: "object", properties: {} },
+          parameters: tool.parameters ? zodToJsonSchema(tool.parameters as any) : { type: "object", properties: {} },
         }
       }));
 
