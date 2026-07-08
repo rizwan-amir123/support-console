@@ -1,6 +1,7 @@
 {
   "name": "support-console",
   "private": true,
+  "packageManager": "npm@11.12.1",
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
@@ -15,9 +16,6 @@
   },
   "engines": {
     "node": ">=18"
-  },
-  "devEngines": {
-    "packageManager": { "name": "npm", "version": ">=10.9.2" }
   },
   "workspaces": [
     "apps/*",
