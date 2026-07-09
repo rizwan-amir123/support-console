@@ -199,4 +199,163 @@ After hitting all 5 endpoints, your new frontend features will reflect the resul
 2. Your **`/queue`** page will display exactly 3 valid proposed escalations (Case 1, Case 2, and Case 5) waiting for supervisors.
 3. Selecting any entry will load the exact chronological timeline inside your updated **System Action Audit Trail** component!
 
+Here is the complete, end-to-end execution flow of your application. This tracks exactly how a customer’s raw text request travels from the frontend terminal, passes through the NestJS architecture and the LLM tool loop, writes to the Supabase database, and surfaces on the human supervisor's dashboard.
+
+## Workflow
+
+## 🛠️ Phase 1: Request Ingestion & Routing
+
+The process starts when a client or an automated testing tool triggers the API.
+
+```
+[cURL Request / Frontend UI] 
+            │
+            ▼
+┌────────────────────────────────────────────────────────┐
+│ 1. AgentController.processSupportRequest()             │
+│    - Receives payload: { orderId, message }            │
+└────────────────────────────────────────────────────────┘
+            │
+            ▼
+┌────────────────────────────────────────────────────────┐
+│ 2. AgentService.runAgentLoop()                         │
+│    - Bootstraps the application state engine           │
+│    - Retrieves fresh order context from database       │
+└────────────────────────────────────────────────────────┘
+
+```
+
+---
+
+## 🧠 Phase 2: The LLM Tool-Calling Loop
+
+Once `runAgentLoop` is initialized, it passes the system rules, tools, and user message to the Groq SDK (`llama-3.1-8b-instant`).
+
+```
+                ┌────────────────────────────────────────┐
+                │ 1. Groq Completion API Called          │
+                └────────────────────────────────────────┘
+                                    │
+                                    ▼
+                ┌────────────────────────────────────────┐
+                │ 2. LLM Planner Analyzes Intent         │
+                └────────────────────────────────────────┘
+                                    │
+                    Is state mutation required?
+                     /                      \
+                   YES                       NO
+                   /                          \
+                  ▼                            ▼
+┌──────────────────────────────┐        ┌──────────────────────────────┐
+│ proposeAction() Called       │        │ safeReadTools Called         │
+│ - proposeRefund()            │        │ - getOrderById()             │
+│ - proposeCancellation()      │        │ - getCustomerById()          │
+└──────────────────────────────┘        └──────────────────────────────┘
+                  │                                    │
+                  ▼                                    ▼
+┌──────────────────────────────┐        ┌──────────────────────────────┐
+│ 3. Schema Check (Zod)        │        │ 3. Fetch Local Data          │
+│    Validates key types       │        │    Returns raw database fields│
+└──────────────────────────────┘        └──────────────────────────────┘
+                  │                                    │
+                  └─────────────────┬──────────────────┘
+                                    │
+                                    ▼
+                ┌────────────────────────────────────────┐
+                │ 4. Results Fed Back into LLM State     │
+                │    Loop repeats if multi-step required │
+                └────────────────────────────────────────┘
+
+```
+
+---
+
+## 💾 Phase 3: Transactional Storage & Guardrail Safety
+
+When a mutation tool like `proposeRefund` is called by the agent loop, the data passes into your transactional persistence layer.
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│ 1. AgentActionRepository.createProposedAction()                        │
+│    - Writes to `agent_actions` table with status: 'proposed'           │
+└────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ 2. AuditLogService.logSystemAction()                                   │
+│    - Writes an immutable record to the `audit_logs` table               │
+│    - Attaches the action to the central `target_id` (Support Request)  │
+└────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ 3. Agent Returns Structured Response JSON                              │
+│    - "Action proposed. Awaiting supervisor review on /queue."          │
+└────────────────────────────────────────────────────────────────────────┘
+
+```
+
+---
+
+## 🖥️ Phase 4: Human-in-the-Loop Supervision (Frontend)
+
+The operational data is now visible on the React dashboard for human approval.
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│ 1. Next.js 15 App Hook: fetchAllOrders() & fetchQueue()                │
+│    - Executed with cache: 'no-store' to fetch fresh database state      │
+└────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ 2. Queue Grid Renders Real-Time Rows                                   │
+│    - Displays "Refunded Delta" and "Cap Lock" state status badges     │
+└────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ 3. Supervisor clicks [Approve Action]                                  │
+│    - Dispatches PATCH request to: `/api/escalations/:id/approve`       │
+└────────────────────────────────────────────────────────────────────────┘
+
+```
+
+---
+
+## 🔒 Phase 5: Final Execution Verification (The Double-Gate)
+
+Before your database updates, the NestJS backend re-runs physical mathematical validations to prevent race conditions or duplicate actions.
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│ 1. EscalationController.approveAction()                                │
+│    - Authenticates the session and locks down the action entry         │
+└────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ 2. OrderService.verifyAndLockFinancials()                              │
+│    - Retetches the order row directly from database                    │
+│    - Enforces Optimistic Lock Check: .eq('version', order.version)    │
+│    - Recalculates: (refunded_amount + delta) <= total_amount           │
+│      ↳ If validation fails: Throws BadRequestException (Aborts!)      │
+└────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ 3. Atomic Database Mutation Commit                                     │
+│    - Mutates `orders.refunded_amount`                                  │
+│    - If amount matches total, sets `is_fully_refunded = true` (🔒)      │
+│    - Increments `version = version + 1`                                │
+│    - Updates `agent_actions.status = 'approved'`                      │
+└────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│ 4. AuditLogService.appendFinalStatus()                                 │
+│    - Saves a historical tracking event linked via target_id            │
+│    - Frontend refreshes and streams the updated timeline successfully! │
+└────────────────────────────────────────────────────────────────────────┘
+
 ```
